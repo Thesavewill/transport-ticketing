@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+  api-gateway:
+    image: nginx:1.25-alpine
+    container_name: api-gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ticket-service
+      - schedule-service
+    networks:
+      - frontend-net
+    restart: always
+
+  ticket-service:
+    build: ./ticket_service
+    image: ticket-service:latest
+    environment:
+      - DB_HOST=postgres-db
+      - DB_NAME=tickets_db
+      - DB_USER=postgres
+      - DB_PASS=postgres
+      - REDIS_HOST=redis-cache
+      - RABBIT_HOST=rabbitmq
+    depends_on:
+      - postgres-db
+      - redis-cache
+      - rabbitmq
+    networks:
+      - frontend-net
+      - backend-net
+    restart: always
+
+  schedule-service:
+    build: ./schedule_service
+    image: schedule-service:latest
+    environment:
+      - REDIS_HOST=redis-cache
+    depends_on:
+      - redis-cache
+    networks:
+      - frontend-net
+      - backend-net
+    restart: always
+
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      - POSTGRES_DB=tickets_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend-net
+    restart: always
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: redis-cache
+    networks:
+      - backend-net
+    restart: always
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "15672:15672"
+    networks:
+      - backend-net
+    restart: always
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+
+volumes:
+  pgdata:
